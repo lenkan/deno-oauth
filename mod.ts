@@ -2,7 +2,7 @@ import {
   serve,
   ServerRequest,
 } from "https://deno.land/std@v0.41.0/http/mod.ts";
-import { Router } from "./router.ts";
+import { Router, createRouter } from "./router.ts";
 import { credentials } from "./credentials.ts";
 import { createOAuth } from "./oauth.ts";
 
@@ -18,7 +18,12 @@ const google = createOAuth({
   redirectUrl: "http://localhost:3000/oauth2callback",
 });
 
-const router = Router<ServerRequest>();
+const router = createRouter<ServerRequest>();
+
+router.use("*", async (_, request, next) => {
+  console.log(request.url);
+  next();
+});
 
 router.use("/login", async (params, request) => {
   const headers = new Headers();
@@ -37,18 +42,23 @@ router.use("/oauth2callback", async (params, request) => {
   const tokenData = await google.getToken(code!);
   const profile = await google.getProfile(tokenData.access_token);
 
-  request.respond({
+  await request.respond({
     status: 200,
     body: JSON.stringify(profile),
-  }).catch(console.error);
+  });
 });
 
-router.use("/", async (params, request) => {
-  request.respond({
+router.use("/", async (params, request, next) => {
+  await request.respond({
     status: 200,
     body: "Hello",
-  }).catch((error) => {
-    console.error(error);
+  });
+});
+
+router.use("/:foo/:bar", async (params, request, next) => {
+  await request.respond({
+    status: 200,
+    body: JSON.stringify(params),
   });
 });
 
@@ -56,5 +66,9 @@ for await (const req of server) {
   const hostname = req.headers.get("host");
   const url = new URL(`http://${hostname}${req.url}`);
 
-  router(url.pathname, req);
+  router(url.pathname, req).then(() => {
+    console.log("Done");
+  }).catch((error) => {
+    console.error(error);
+  });
 }
